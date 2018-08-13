@@ -1,420 +1,608 @@
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Collections;
-using System.Diagnostics;
 using System;
 
-namespace Wb.TaskManager.Data.Models
+namespace Wb.MiComprobante.Common
 {
-    [Serializable]
-    [DebuggerDisplay("Count = {Count}, Capacity = {Capacity}, Free = {FreeCount}")]
-    public class ItemList<T> : IList<T>, IList, IReadOnlyList<T>, IReadOnlyCollection<T>
-    {
-        #region Private/Protected Member Variables
-        private const byte defaultCapacity = 5;
-        private T[] items = Array.Empty<T>();
-        private uint version = 1;
-        private int count = 0;
-        #endregion
+	[Serializable]
+	public class ItemList<T> : IList<T>, IList, IReadOnlyList<T>, IReadOnlyCollection<T>
+	{
+		#region Private/Protected Member Variables
+		private T[] itemsSource = Array.Empty<T>();
+		private const byte defaultCapacity = 5;
+		private uint version = 1;
+		private object syncRoot;
+		#endregion
 
-        #region Private/Protected Properties
-        #endregion
+		#region Private/Protected Properties
+		#endregion
 
-        #region Private/Protected Methods
-        private void ValidateIndex(int index, [CallerMemberName] string callerMember = "")
-        {
-            if (index < 0)
-                throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be greater than zero.");
+		#region Private/Protected Methods
+		private void ValidateIndex(int index, [CallerMemberName] string callerMember = "")
+		{
+			if (index < 0)
+				throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be greater than zero.");
 
-            if (index > count)
-                throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be smaller than items count.");
-        }
-        private T CastValue(object value, [CallerMemberName] string callerMember = "")
-        {
-            if (!(value is T))
-                throw new InvalidCastException($"List action { callerMember }( ) could not finish. Object value can not be converted to '{ nameof(T) }' type.");
+			if (index > Count)
+				throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be smaller than items count.");
+		}
+		private T CastValue(object value, [CallerMemberName] string callerMember = "")
+		{
+			if (!(value is T))
+				throw new InvalidCastException($"List action { callerMember }( ) could not finish. Object value can not be converted to '{ nameof(T) }' type.");
 
-            return (T) value;
-        }
+			return (T)value;
+		}
+		private void DefinitionInsertRange(int index, ICollection<T> collection)
+		{
+			int collectionCount = collection.Count;
+			EnsureCapacity(collectionCount);
 
-        private void DefinitionInsertRange(int index, ICollection<T> collection)
-        {
-            int collectionCount = collection.Count;
-            EnsureCapacity(collectionCount);
+			if (index < Count)
+				Array.Copy(itemsSource, index, itemsSource, (index + collectionCount), (Count - index));
 
-            if (index < count)
-                Array.Copy(items, index, items, (index + collectionCount), (count - index));
+			var itemsToInsert = new T[collectionCount];
+			collection.CopyTo(itemsToInsert, 0);
 
-            T[] itemsToInsert = new T[collectionCount];
-            collection.CopyTo(itemsToInsert, 0);
+			itemsToInsert.CopyTo(itemsSource, index);
 
-            itemsToInsert.CopyTo(items, index);
+			Count += collectionCount;
+			version++;
+		}
+		private void EnsureCapacity(int minFreeCount = 1)
+		{
+			if (FreeCount < minFreeCount)
+			{
+				int estimatedMinCapacity = Count + minFreeCount,
+					newCapacity = (Capacity * 3) >> 1;
 
-            count += collectionCount;
-            version++;
-        }
-        private void EnsureCapacity(int minFreeCount = 1)
-        {
-            if (FreeCount < minFreeCount)
-            {
-                int estimatedMinCapacity = count + minFreeCount,
-                    newCapacity = (items.Length * 3) >> 1;
+				if (newCapacity < estimatedMinCapacity)
+					newCapacity = estimatedMinCapacity + defaultCapacity;
 
-                if (newCapacity < estimatedMinCapacity)
-                    newCapacity = estimatedMinCapacity + defaultCapacity;
+				Capacity = newCapacity;
+			}
+		}
+		#endregion
 
-                Capacity = newCapacity;
-            }
-        }
-        #endregion
+		#region Constructors
+		public ItemList()
+		{
+			itemsSource = new T[defaultCapacity];
+		}
+		public ItemList(int capacity)
+		{
+			if (capacity <= 0)
+				throw new ArgumentOutOfRangeException("capacity", "Capacity of list should be greater tha zero.");
 
-        #region Constructors
-        public ItemList()
-        {
-            items = new T[defaultCapacity];
-        }
-        public ItemList(int capacity)
-        {
-            if (capacity <= 0)
-                throw new ArgumentOutOfRangeException("capacity", "Capacity of list should be greater tha zero.");
+			int initialCapacity = Math.Max(capacity, defaultCapacity);
 
-            items = new T[capacity];
-        }
-        public ItemList(ICollection<T> collection)
-        {
-            if (collection == null)
-                throw new ArgumentNullException("collection", "Initial collection of list can not be null.");
+			itemsSource = new T[initialCapacity];
+		}
+		public ItemList(ICollection<T> collection)
+		{
+			if (collection == null)
+				throw new ArgumentNullException("collection", "Initial collection of list can not be null.");
 
-            if (collection.Count > 0)
-            {
-                items = new T[collection.Count];
-                DefinitionInsertRange(count, collection);
-            }
-            else
-            {
-                items = new T[defaultCapacity];
-            }
+			int initialCapacity = Math.Max(collection.Count, defaultCapacity);
 
-        }
-        #endregion
+			itemsSource = new T[initialCapacity];
+			DefinitionInsertRange(Count, collection);
+		}
+		#endregion
 
-        #region Indexer
-        public T this[int index]
-        {
-            get
-            {
-                ValidateIndex(index);
-                return items[index];
-            }
+		#region Indexer
+		public T this[int index]
+		{
+			get
+			{
+				ValidateIndex(index);
+				return itemsSource[index];
+			}
 
-            set
-            {
-                ValidateIndex(index);
-                items[index] = value;
-            }
-        }
-        #endregion
+			set
+			{
+				ValidateIndex(index);
+				itemsSource[index] = value;
+			}
+		}
+		#endregion
 
-        #region Public Properties
-        public bool IsReadOnly
-        {
-            get { return false; }
-        }
-        public int FreeCount
-        {
-            get { return items.Length - count; }
-        }
-        public int Capacity
-        {
-            get { return items.Length; }
+		#region Public Properties
+		public bool IsReadOnly
+		{
+			get { return false; }
+		}
+		public int FreeCount
+		{
+			get { return Capacity - Count; }
+		}
+		public int Capacity
+		{
+			get { return itemsSource.Length; }
 
-            private set
-            {
-                T[] relocatedItems = new T[value];
-                Array.Copy(items, 0, relocatedItems, 0, count);
+			private set
+			{
+				var relocatedItems = new T[value];
+				Array.Copy(itemsSource, 0, relocatedItems, 0, Count);
 
-                items = relocatedItems;
-            }
-        }
-        public int Count
-        {
-            get { return count; }
-        }
-        #endregion
+				itemsSource = relocatedItems;
+			}
+		}
+		public int Count
+		{
+			get; private set;
+		}
+		#endregion
 
-        #region Public Methods
-        public void Insert(int index, T item)
-        {
-            ValidateIndex(index);
-            EnsureCapacity();
+		#region Public Methods
+		public void Insert(int index, T item)
+		{
+			ValidateIndex(index);
+			EnsureCapacity();
 
-            if (index < count)
-                Array.Copy(items, index, items, (index + 1), (count - index));
+			if (index < Count)
+				Array.Copy(itemsSource, index, itemsSource, (index + 1), (Count - index));
 
-            items[index] = item;
-            version++;
-            count++;
-        }
-        public void RemoveAt(int index)
-        {
-            ValidateIndex(index);
+			itemsSource[index] = item;
+			version++;
+			Count++;
+		}
+		public void RemoveAt(int index)
+		{
+			ValidateIndex(index);
 
-            if (index == count)
-                throw new IndexOutOfRangeException($"List action RemoveAt( { index } ) could not finish. Index can not be greater or equal than items count.");
+			if (index == Count)
+				throw new IndexOutOfRangeException($"List action RemoveAt( { index } ) could not finish. Index can not be greater or equal than items count.");
 
-            count--;
+			if (index < (--Count))
+				Array.Copy(itemsSource, (index + 1), itemsSource, index, (Count - index));
 
-            if (index < count)
-                Array.Copy(items, (index + 1), items, index, (count - index));
+			itemsSource[Count] = default(T);
+			version++;
+		}
+		public bool Remove(T item)
+		{
+			int itemIndex = IndexOf(item);
+			bool found = itemIndex >= 0;
 
-            items[count] = default(T);
-            version++;
-        }
-        public bool Remove(T item)
-        {
-            int itemIndex = IndexOf(item);
-            bool found = itemIndex >= 0;
+			if (found)
+				RemoveAt(itemIndex);
 
-            if (found)
-                RemoveAt(itemIndex);
+			return found;
+		}
+		public void Add(T item)
+		{
+			EnsureCapacity();
+			itemsSource[Count++] = item;
+			version++;
+		}
+		public void Clear()
+		{
+			if (Count > 0)
+			{
+				Array.Clear(itemsSource, 0, Count);
+				Count = 0;
+				version++;
+			}
+		}
 
-            return found;
-        }
-        public void Add(T item)
-        {
-            EnsureCapacity();
-            items[count++] = item;
-            version++;
-        }
-        public void Clear()
-        {
-            if (count > 0)
-            {
-                Array.Clear(items, 0, count);
-                count = 0;
-                version++;
-            }
-        }
+		public bool Contains(T item)
+		{
+			var comparer = EqualityComparer<T>.Default;
 
-        public bool Contains(T item)
-        {
-            var comparer = EqualityComparer<T>.Default;
+			for (int index = 0; index < Count; index++)
+				if (comparer.Equals(itemsSource[index], item))
+					return true;
 
-            for (int index = 0; index < count; index++)
-                if (comparer.Equals(items[index], item))
-                    return true;
+			return false;
+		}
+		public int IndexOf(T item)
+		{
+			return Array.IndexOf(itemsSource, item, 0, Count);
+		}
 
-            return false;
-        }
-        public int IndexOf(T item)
-        {
-            return Array.IndexOf(items, item, 0, count);
-        }
+		public void InsertRange(int index, ICollection<T> collection)
+		{
+			ValidateIndex(index);
 
-        public void InsertRange(int index, ICollection<T> collection)
-        {
-            ValidateIndex(index);
+			if (collection == null)
+				throw new ArgumentNullException("collection", "Collection to add must be diferent than null.");
 
-            if (collection == null)
-                throw new ArgumentNullException("collection", "Collection to add must be diferent than null.");
+			if (collection.Count != 0)
+				DefinitionInsertRange(index, collection);
+		}
+		public void AddRange(ICollection<T> elements)
+		{
+			InsertRange(Count, elements);
+		}
 
-            else if (collection.Count == 0)
-                throw new ArgumentOutOfRangeException("collection", "Collection count must be greater than zero.");
+		public void ForEach(Action<T> action)
+		{
+			if (action == null)
+				throw new ArgumentNullException("action", "Action to execute can not be null.");
 
-            DefinitionInsertRange(index, collection);
-        }
-        public void AddRange(ICollection<T> elements)
-        {
-            InsertRange(count, elements);
-        }
+			for (int i = 0; i < Count; i++)
+				action(itemsSource[i]);
+		}
+		public T[] FindAll(Predicate<T> match)
+		{
+			if (match == null)
+				throw new ArgumentNullException("match", "Match item predicate can not be null.");
 
-        public ItemList<T> GetRange(int index, int itemsCount)
-        {
-            ValidateIndex(index);
+			var list = new ItemList<T>();
+			var item = default(T);
 
-            if (itemsCount < 0)
-                throw new IndexOutOfRangeException("Items count should be greater than zero.");
+			for (int i = 0; i < Count; i++)
+			{
+				item = itemsSource[i];
 
-            if (itemsCount > (count - index))
-                throw new IndexOutOfRangeException("New items count should be smaller than actual items count.");
+				if (match(item))
+					list.Add(item);
+			}
 
-            T[] newItems = new T[itemsCount];
-            Array.Copy(items, index, newItems, 0, itemsCount);
+			return list.ToArray();
+		}
+		public T Find(Predicate<T> match)
+		{
+			if (match == null)
+				throw new ArgumentNullException("match", "Match item predicate can not be null.");
 
-            return new ItemList<T>(newItems);
-        }
-        public void CopyTo(T[] array, int arrayIndex)
-        {
-            Array.Copy(items, 0, array, arrayIndex, count);
-        }
-        public void CopyTo(T[] array)
-        {
-            CopyTo(array, 0);
-        }
-        public T[] ToArray()
-        {
-            T[] array = new T[count];
-            CopyTo(array, 0);
-            return array;
-        }
+			var item = default(T);
 
-        public sealed override string ToString()
-        {
-            switch (count)
-            {
-                case 0:
-                    return "[]";
-                case 1:
-                    return $"[{ items[0] }]";
-                default:
-                    return $"[{ string.Join(",", items) }]";
-            }
-        }
-        public IEnumerator<T> GetEnumerator()
-        {
-            return new CoreEnumerator(this);
-        }
-        public void TrimExcess()
-        {
-            if (FreeCount > defaultCapacity)
-                Capacity = count + defaultCapacity;
-        }
-        #endregion
+			for (int i = 0; i < Count; i++)
+			{
+				item = itemsSource[i];
 
-        #region Internal IEnumerator
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return items.GetEnumerator();
-        }
-        #endregion
+				if (match(item))
+					return item;
+			}
 
-        #region Non Generic List
-        public bool IsFixedSize
-        {
-            get { return false; }
-        }
-        public object SyncRoot
-        {
-            get { return null; }
-        }
-        public bool IsSynchronized
-        {
-            get { return false; }
-        }
+			return default(T);
+		}
 
-        object IList.this[int index]
-        {
-            get { return this[index]; }
-            set { this[index] = CastValue(value); }
-        }
-        public int Add(object value)
-        {
-            int index = count;
-            Add(CastValue(value));
-            return index;
-        }
-        public bool Contains(object value)
-        {
-            return Contains(CastValue(value));
-        }
-        public int IndexOf(object value)
-        {
-            return IndexOf(CastValue(value));
-        }
-        public void Insert(int index, object value)
-        {
-            Insert(index, CastValue(value));
-        }
-        public void Remove(object value)
-        {
-            Remove(CastValue(value));
-        }
-        public void CopyTo(Array array, int index)
-        {
-            CopyTo((T[]) array, index);
-        }
-        #endregion
+		public ItemList<T> GetRange(int index, int itemsCount)
+		{
+			ValidateIndex(index);
 
-        #region Publict Struct
-        [Serializable]
-        public struct CoreEnumerator : IEnumerator<T>, IEnumerator
-        {
-            #region Private/Protected Member Variables
-            private readonly ItemList<T> list;
-            private uint version, index;
-            private T current;
-            #endregion
+			if (itemsCount < 0)
+				throw new IndexOutOfRangeException("Items count should be greater than zero.");
 
-            #region Private/Protected Methods
-            public bool MoveNext()
-            {
-                ItemList<T> localList = list;
+			if (itemsCount > (Count - index))
+				throw new IndexOutOfRangeException("New items count should be smaller than actual items count.");
 
-                if (version == localList.version && (index < (uint) localList.Count))
-                {
-                    current = localList.items[index];
-                    index++;
+			var newItems = new T[itemsCount];
+			Array.Copy(itemsSource, index, newItems, 0, itemsCount);
 
-                    return true;
-                }
+			return new ItemList<T>(newItems);
+		}
+		public void CopyTo(T[] array, int arrayIndex)
+		{
+			Array.Copy(itemsSource, 0, array, arrayIndex, Count);
+		}
+		public void CopyTo(T[] array)
+		{
+			CopyTo(array, 0);
+		}
+		public T[] ToArray()
+		{
+			var array = Array.Empty<T>();
 
-                return MoveNextRare();
-            }
-            public T Current
-            {
-                get { return current; }
-            }
-            #endregion
+			if (Count > 0)
+			{
+				array = new T[Count];
+				CopyTo(array);
+			}
 
-            #region Constructors
-            internal CoreEnumerator(ItemList<T> list)
-            {
-                this.list = list;
+			return array;
+		}
 
-                index = 0;
-                version = list.version;
+		public IEnumerator<T> GetEnumerator()
+		{
+			return new CoreEnumerator(this);
+		}
+		public override string ToString()
+		{
+			return $"Count = { Count }, Capacity = { Capacity }, Free = { FreeCount }";
+		}
+		public void TrimExcess()
+		{
+			if (FreeCount > defaultCapacity)
+				Capacity = Count + defaultCapacity;
+		}
+		public string Print()
+		{
+			switch (Count)
+			{
+				case 0:
+					return "[]";
 
-                current = default(T);
-            }
-            #endregion
+				case 1:
+					return $"[{ itemsSource[0] }]";
 
-            #region Public Properties
-            public void Dispose() { }
-            #endregion
+				default:
+					return $"[{ string.Join(", ", itemsSource) }]";
+			}
+		}
+		#endregion
 
-            #region Public Methods
-            private bool MoveNextRare()
-            {
-                if (version != list.version)
-                    throw new InvalidOperationException();
+		#region Internal IEnumerator
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			return itemsSource.GetEnumerator();
+		}
+		#endregion
 
-                index = (uint) (list.count + 1);
-                current = default(T);
-                return false;
-            }
-            #endregion
+		#region Non Generic List
+		public bool IsSynchronized
+		{
+			get { return false; }
+		}
+		public bool IsFixedSize
+		{
+			get { return false; }
+		}
+		public object SyncRoot
+		{
+			get
+			{
+				if (syncRoot == null)
+					System.Threading.Interlocked.CompareExchange(ref syncRoot, new object(), null);
 
-            #region IEnumerator Implementation
-            object IEnumerator.Current
-            {
-                get
-                {
-                    if (index == 0 || index > list.count)
-                        throw new IndexOutOfRangeException();
+				return syncRoot;
+			}
+		}
 
-                    return Current;
-                }
-            }
-            void IEnumerator.Reset()
-            {
-                if (version != list.version)
-                    throw new InvalidOperationException();
+		object IList.this[int index]
+		{
+			get { return this[index]; }
+			set { this[index] = CastValue(value); }
+		}
 
-                index = 0;
-                current = default(T);
-            }
-            #endregion
-        }
-        #endregion
-    }
+		public void Insert(int index, object value)
+		{
+			Insert(index, CastValue(value));
+		}
+		public void Remove(object value)
+		{
+			Remove(CastValue(value));
+		}
+		public int Add(object value)
+		{
+			int index = Count;
+			Add(CastValue(value));
+			return index;
+		}
+
+		public void CopyTo(Array array, int index)
+		{
+			CopyTo((T[])array, index);
+		}
+		public bool Contains(object value)
+		{
+			return Contains(CastValue(value));
+		}
+		public int IndexOf(object value)
+		{
+			return IndexOf(CastValue(value));
+		}
+		#endregion
+
+		#region SynchronizedList
+		[Serializable]
+		internal class SynchronizedList : IList<T>
+		{
+			private readonly ItemList<T> list;
+			private readonly object root;
+
+			internal SynchronizedList(ItemList<T> list)
+			{
+				this.list = list;
+				root = list.SyncRoot;
+			}
+
+			public int Count
+			{
+				get
+				{
+					lock (root)
+					{
+						return list.Count;
+					}
+				}
+			}
+
+			public bool IsReadOnly
+			{
+				get
+				{
+					return list.IsReadOnly;
+				}
+			}
+
+			public void Add(T item)
+			{
+				lock (root)
+				{
+					list.Add(item);
+				}
+			}
+
+			public void Clear()
+			{
+				lock (root)
+				{
+					list.Clear();
+				}
+			}
+
+			public bool Contains(T item)
+			{
+				lock (root)
+				{
+					return list.Contains(item);
+				}
+			}
+
+			public void CopyTo(T[] array, int arrayIndex)
+			{
+				lock (root)
+				{
+					list.CopyTo(array, arrayIndex);
+				}
+			}
+
+			public bool Remove(T item)
+			{
+				lock (root)
+				{
+					return list.Remove(item);
+				}
+			}
+
+			IEnumerator IEnumerable.GetEnumerator()
+			{
+				lock (root)
+				{
+					return list.GetEnumerator();
+				}
+			}
+
+			IEnumerator<T> IEnumerable<T>.GetEnumerator()
+			{
+				lock (root)
+				{
+					return list.GetEnumerator();
+				}
+			}
+
+			public T this[int index]
+			{
+				get
+				{
+					lock (root)
+					{
+						return list[index];
+					}
+				}
+				set
+				{
+					lock (root)
+					{
+						list[index] = value;
+					}
+				}
+			}
+
+			public int IndexOf(T item)
+			{
+				lock (root)
+				{
+					return list.IndexOf(item);
+				}
+			}
+
+			public void Insert(int index, T item)
+			{
+				lock (root)
+				{
+					list.Insert(index, item);
+				}
+			}
+
+			public void RemoveAt(int index)
+			{
+				lock (root)
+				{
+					list.RemoveAt(index);
+				}
+			}
+		}
+		#endregion
+
+		#region Publict Struct
+		[Serializable]
+		public struct CoreEnumerator : IEnumerator<T>, IEnumerator
+		{
+			#region Private/Protected Member Variables
+			private readonly ItemList<T> list;
+			private readonly uint version;
+			private int index;
+			#endregion
+
+			#region Private/Protected Methods
+			#endregion
+
+			#region Constructors
+			internal CoreEnumerator(ItemList<T> list)
+			{
+				this.list = list;
+
+				version = list.version;
+				index = 0;
+
+				Current = default(T);
+			}
+			#endregion
+
+			#region Public Properties
+			public T Current
+			{
+				get; private set;
+			}
+			#endregion
+
+			#region Public Methods
+			private bool MoveNextRare()
+			{
+				if (version != list.version)
+					throw new InvalidOperationException();
+
+				index = list.Count + 1;
+				Current = default(T);
+				return false;
+			}
+			public bool MoveNext()
+			{
+				ItemList<T> localList = list;
+
+				if (version == localList.version && (index < localList.Count))
+				{
+					Current = localList.itemsSource[index];
+					index++;
+
+					return true;
+				}
+
+				return MoveNextRare();
+			}
+			public void Dispose()
+			{
+				Current = default(T);
+			}
+			#endregion
+
+			#region IEnumerator Implementation
+			object IEnumerator.Current
+			{
+				get
+				{
+					if (index == 0 || index > list.Count)
+						throw new IndexOutOfRangeException();
+
+					return Current;
+				}
+			}
+			void IEnumerator.Reset()
+			{
+				if (version != list.version)
+					throw new InvalidOperationException();
+
+				Current = default(T);
+				index = 0;
+			}
+			#endregion
+		}
+		#endregion
+	}
 }
