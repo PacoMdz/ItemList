@@ -4,14 +4,14 @@ using System.ComponentModel;
 using System.Collections;
 using System;
 
-namespace Wb.TaskManager.Data.Models
+namespace UList
 {
-    public class ObservableList<T> : IList<T>, IReadOnlyList<T>, IReadOnlyCollection<T>, INotifyCollectionChanged, INotifyPropertyChanged
+    public class ObservableList<T> : IList<T>, IReadOnlyList<T>, INotifyCollectionChanged, INotifyPropertyChanged
     {
         #region Private/Protected Member Variables
         private readonly SimpleMonitor monitor = new SimpleMonitor();
         private const string CountProperty = "Count";
-        private readonly ItemList<T> items;
+        private readonly OptimizedList<T> items;
         #endregion
 
         #region Private/Protected Properties
@@ -33,15 +33,15 @@ namespace Wb.TaskManager.Data.Models
         #region Constructor
         public ObservableList()
         {
-            items = new ItemList<T>();
+            items = new OptimizedList<T>();
         }
         public ObservableList(int capacity)
         {
-            items = new ItemList<T>(capacity);
+            items = new OptimizedList<T>(capacity);
         }
         public ObservableList(ICollection<T> collection)
         {
-            items = new ItemList<T>(collection);
+            items = new OptimizedList<T>(collection);
         }
         #endregion
 
@@ -65,23 +65,6 @@ namespace Wb.TaskManager.Data.Models
         #endregion
 
         #region Public Methods
-        public void AddRange(ICollection<T> collection)
-        {
-            if (collection != null && collection.Count > 0)
-            {
-                CheckReentrancy();
-                int index = items.Count;
-
-                items.AddRange(collection);
-
-                OnPropertyChanged(CountProperty);
-
-                var array = new T[collection.Count];
-                collection.CopyTo(array, 0);
-
-                OnCollectionRangeChanged(NotifyCollectionChangedAction.Add, array, index);
-            }
-        }
         public void Insert(int index, T item)
         {
             CheckReentrancy();
@@ -129,6 +112,37 @@ namespace Wb.TaskManager.Data.Models
             OnCollectionReset();
         }
 
+        public void AddRange(ICollection<T> collection)
+        {
+            if (collection != null && collection.Count > 0)
+            {
+                CheckReentrancy();
+                int index = items.Count;
+
+                items.AddRange(collection);
+
+                OnPropertyChanged(CountProperty);
+
+                var array = new T[collection.Count];
+                collection.CopyTo(array, 0);
+
+                OnCollectionRangeChanged(NotifyCollectionChangedAction.Add, array, index);
+            }
+        }
+        public void AddRange(T[] collection)
+        {
+            if (collection != null && collection.Length > 0)
+            {
+                CheckReentrancy();
+                int index = items.Count;
+
+                items.AddRange(collection);
+
+                OnPropertyChanged(CountProperty);
+                OnCollectionRangeChanged(NotifyCollectionChangedAction.Add, collection, index);
+            }
+        }
+
         public void CopyTo(T[] array, int arrayIndex)
         {
             items.CopyTo(array, arrayIndex);
@@ -144,6 +158,11 @@ namespace Wb.TaskManager.Data.Models
         public int IndexOf(T item)
         {
             return items.IndexOf(item);
+        }
+        
+        public void TrimExcess()
+        {
+            items.TrimExcess();
         }
         #endregion
 
