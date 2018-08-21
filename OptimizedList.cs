@@ -4,7 +4,7 @@ using System.Collections;
 using System.Threading;
 using System;
 
-namespace UList
+namespace Mx.CustomList
 {
     [Serializable]
     public class OptimizedList<T> : IList<T>, IList, IReadOnlyList<T>
@@ -36,22 +36,6 @@ namespace UList
             return (T) value;
         }
 
-        private void DefinitionInsertRange(int index, ICollection<T> collection)
-        {
-            int collectionCount = collection.Count;
-            EnsureCapacity(collectionCount);
-
-            if (index < Count)
-                Array.Copy(itemsSource, index, itemsSource, (index + collectionCount), (Count - index));
-
-            var itemsToInsert = new T[collectionCount];
-            collection.CopyTo(itemsToInsert, 0);
-
-            itemsToInsert.CopyTo(itemsSource, index);
-
-            Count += collectionCount;
-            version++;
-        }
         private void DefinitionInsertRange(int index, T[] collection)
         {
             int collectionCount = collection.Length;
@@ -104,18 +88,6 @@ namespace UList
             itemsSource = new T[initialCapacity];
 
             if (collection.Length > 0)
-                DefinitionInsertRange(Count, collection);
-        }
-        public OptimizedList(ICollection<T> collection)
-        {
-            if (collection == null)
-                throw new ArgumentNullException("collection", "Initial collection of list can not be null.");
-
-            int initialCapacity = Math.Max(collection.Count, defaultCapacity);
-
-            itemsSource = new T[initialCapacity];
-
-            if (collection.Count > 0)
                 DefinitionInsertRange(Count, collection);
         }
         #endregion
@@ -231,16 +203,6 @@ namespace UList
             return Array.IndexOf(itemsSource, item, 0, Count);
         }
 
-        public void InsertRange(int index, ICollection<T> collection)
-        {
-            ValidateIndex(index);
-
-            if (collection == null)
-                throw new ArgumentNullException("collection", "Collection to add must be diferent than null.");
-
-            if (collection.Count != 0)
-                DefinitionInsertRange(index, collection);
-        }
         public void InsertRange(int index, T[] collection)
         {
             ValidateIndex(index);
@@ -250,10 +212,6 @@ namespace UList
 
             if (collection.Length != 0)
                 DefinitionInsertRange(index, collection);
-        }
-        public void AddRange(ICollection<T> elements)
-        {
-            InsertRange(Count, elements);
         }
         public void AddRange(T[] elements)
         {
