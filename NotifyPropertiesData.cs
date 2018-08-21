@@ -1,10 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System;
 
 namespace UNotifyProperties
 {
-    public abstract class NotifyPropertiesData : INotifyPropertyChanged
+   public abstract class NotifyPropertyChanged : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -12,34 +13,43 @@ namespace UNotifyProperties
         {
             if (properties != null && properties.Length > 0)
             {
-                foreach (string prop in properties)
-                {
-                    if (!string.IsNullOrWhiteSpace(prop))
-                    {
-                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
-                    }
-                }
+                foreach (string propertyName in properties)
+                    if (!string.IsNullOrWhiteSpace(propertyName))
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
             }
         }
-        protected void RisePropertyChanged([CallerMemberName] string prop = "")
+
+        protected void RisePropertyChanged([CallerMemberName] string propertyName = "")
         {
-            if (!string.IsNullOrWhiteSpace(prop))
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+            if (!string.IsNullOrWhiteSpace(propertyName))
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string prop = "")
+
+        protected bool SetProperty<T>(ref T property, T value, [CallerMemberName] string propertyName = "")
         {
-            if (!string.IsNullOrWhiteSpace(prop) && !EqualityComparer<T>.Default.Equals(field, value))
+            if (!(string.IsNullOrWhiteSpace(propertyName) || EqualityComparer<T>.Default.Equals(property, value)))
             {
-                field = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+                property = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
                 return true;
             }
             return false;
         }
-        protected T GetProperty<T>([CallerMemberName] string prop = "")
+
+        protected bool SetProperty<T>(ref T property, T value, Action callback, [CallerMemberName] string propertyName = "")
         {
-            return string.IsNullOrWhiteSpace(prop) ?
-                default(T) : (T)GetType().GetProperty(prop)?.GetValue(this, null);
+            bool propertyChanged = SetProperty(ref property, value, propertyName);
+
+            if (propertyChanged)
+                callback?.Invoke();
+
+            return propertyChanged;
+        }
+
+        protected T GetProperty<T>([CallerMemberName] string propertyName = "")
+        {
+            return string.IsNullOrWhiteSpace(propertyName) ?
+                default(T) : (T) GetType().GetProperty(propertyName)?.GetValue(this, null);
         }
     }
 }
