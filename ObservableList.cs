@@ -1,17 +1,15 @@
 using System.Collections.Specialized;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Collections;
 using System;
 
 namespace UList
 {
-    public class ObservableList<T> : IList<T>, IReadOnlyList<T>, INotifyCollectionChanged, INotifyPropertyChanged
+    public class ObservableList<TEntity> : OptimizedList<TEntity>, INotifyCollectionChanged, INotifyPropertyChanged
     {
         #region Private/Protected Member Variables
         private readonly SimpleMonitor monitor = new SimpleMonitor();
-        private const string CountProperty = "Count";
-        private readonly OptimizedList<T> items;
+        private const string CountPropertyName = "Count";
         #endregion
 
         #region Private/Protected Properties
@@ -31,172 +29,109 @@ namespace UList
         #endregion
 
         #region Constructor
-        public ObservableList()
-        {
-            items = new OptimizedList<T>();
-        }
-        public ObservableList(int capacity)
-        {
-            items = new OptimizedList<T>(capacity);
-        }
-        public ObservableList(ICollection<T> collection)
-        {
-            items = new OptimizedList<T>(collection);
-        }
-        #endregion
-
-        #region Indexer
-        public T this[int index]
-        {
-            get { return items[index]; }
-            set { items[index] = value; }
-        }
+        public ObservableList() : base() { }
+        public ObservableList(int capacity) : base(capacity) { }
+        public ObservableList(TEntity[] collection) : base(collection) { }
         #endregion
 
         #region Public Properties
-        public bool IsReadOnly
-        {
-            get { return items.IsReadOnly; }
-        }
-        public int Count
-        {
-            get { return items.Count; }
-        }
         #endregion
 
         #region Public Methods
-        public void Insert(int index, T item)
+        public override void Insert(int index, TEntity item)
         {
             CheckReentrancy();
-            items.Insert(index, item);
-            OnPropertyChanged(CountProperty);
-            OnCollectionChanged(NotifyCollectionChangedAction.Add, item, index);
+            base.Insert(index, item);
+            RaisePropertyChanged(CountPropertyName);
+            RaiseCollectionChanged(NotifyCollectionChangedAction.Add, item, index);
         }
-        public void RemoveAt(int index)
+        public override void RemoveAt(int index)
         {
-            T item = items[index];
-            items.RemoveAt(index);
+            TEntity item = this[index];
+            base.RemoveAt(index);
 
-            OnPropertyChanged(CountProperty);
-            OnCollectionChanged(NotifyCollectionChangedAction.Remove, item, index);
+            RaisePropertyChanged(CountPropertyName);
+            RaiseCollectionChanged(NotifyCollectionChangedAction.Remove, item, index);
         }
-        public bool Remove(T item)
+        public override bool Remove(TEntity item)
         {
             CheckReentrancy();
-            int itemIndex = items.IndexOf(item);
+            int itemIndex = IndexOf(item);
 
             if (itemIndex >= 0)
             {
-                items.RemoveAt(itemIndex);
+                RemoveAt(itemIndex);
 
-                OnPropertyChanged(CountProperty);
-                OnCollectionChanged(NotifyCollectionChangedAction.Remove, item, itemIndex);
+                RaisePropertyChanged(CountPropertyName);
+                RaiseCollectionChanged(NotifyCollectionChangedAction.Remove, item, itemIndex);
                 return true;
             }
 
             return false;
         }
-        public void Add(T item)
+        public override void Add(TEntity item)
         {
             CheckReentrancy();
-            items.Add(item);
-            OnPropertyChanged(CountProperty);
-            OnCollectionChanged(NotifyCollectionChangedAction.Add, item, (items.Count - 1));
+            base.Add(item);
+            RaisePropertyChanged(CountPropertyName);
+            RaiseCollectionChanged(NotifyCollectionChangedAction.Add, item, (Count - 1));
         }
-        public void Clear()
+        public override void Clear()
         {
             CheckReentrancy();
-            items.Clear();
+            base.Clear();
 
-            OnPropertyChanged(CountProperty);
-            OnCollectionReset();
+            RaisePropertyChanged(CountPropertyName);
+            RaiseCollectionReset();
         }
 
-        public void AddRange(ICollection<T> collection)
-        {
-            if (collection != null && collection.Count > 0)
-            {
-                CheckReentrancy();
-                int index = items.Count;
-
-                items.AddRange(collection);
-
-                OnPropertyChanged(CountProperty);
-
-                var array = new T[collection.Count];
-                collection.CopyTo(array, 0);
-
-                OnCollectionRangeChanged(NotifyCollectionChangedAction.Add, array, index);
-            }
-        }
-        public void AddRange(T[] collection)
+        public override void AddRange(TEntity[] collection)
         {
             if (collection != null && collection.Length > 0)
             {
                 CheckReentrancy();
-                int index = items.Count;
+                int index = Count;
 
-                items.AddRange(collection);
+                base.AddRange(collection);
 
-                OnPropertyChanged(CountProperty);
-                OnCollectionRangeChanged(NotifyCollectionChangedAction.Add, collection, index);
+                RaisePropertyChanged(CountPropertyName);
+                RaiseCollectionRangeChanged(NotifyCollectionChangedAction.Add, collection, index);
             }
-        }
-
-        public void CopyTo(T[] array, int arrayIndex)
-        {
-            items.CopyTo(array, arrayIndex);
-        }
-        public IEnumerator<T> GetEnumerator()
-        {
-            return items.GetEnumerator();
-        }
-        public bool Contains(T item)
-        {
-            return items.Contains(item);
-        }
-        public int IndexOf(T item)
-        {
-            return items.IndexOf(item);
-        }
-        
-        public void TrimExcess()
-        {
-            items.TrimExcess();
         }
         #endregion
 
         #region Public Events
-        public virtual event NotifyCollectionChangedEventHandler CollectionChanged;
-        private void OnCollectionChanged(NotifyCollectionChangedAction action, object item, int index)
+        public event NotifyCollectionChangedEventHandler CollectionChanged;
+        private void RaiseCollectionChanged(NotifyCollectionChangedAction action, object item, int index)
         {
             using (BlockReentrancy())
             {
                 CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, item, index));
             }
         }
-        private void OnCollectionRangeChanged(NotifyCollectionChangedAction action, IList items, int index)
+        private void RaiseCollectionRangeChanged(NotifyCollectionChangedAction action, IList items, int index)
         {
             using (BlockReentrancy())
             {
-                CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, items, index));
+                //CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, items, index));
+                CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             }
         }
-        private void OnCollectionChanged(NotifyCollectionChangedAction action, object item, int index, int oldIndex)
+        private void RaiseCollectionChanged(NotifyCollectionChangedAction action, object item, int index, int oldIndex)
         {
             using (BlockReentrancy())
             {
                 CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, item, index, oldIndex));
             }
         }
-        private void OnCollectionChanged(NotifyCollectionChangedAction action, object oldItem, object newItem, int index)
+        private void RaiseCollectionChanged(NotifyCollectionChangedAction action, object oldItem, object newItem, int index)
         {
             using (BlockReentrancy())
             {
                 CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, newItem, oldItem, index));
             }
         }
-        private void OnCollectionReset()
+        private void RaiseCollectionReset()
         {
             using (BlockReentrancy())
             {
@@ -204,22 +139,27 @@ namespace UList
             }
         }
 
-        protected virtual event PropertyChangedEventHandler PropertyChanged;
-        event PropertyChangedEventHandler INotifyPropertyChanged.PropertyChanged
-        {
-            add { PropertyChanged += value; }
-            remove { PropertyChanged -= value; }
-        }
-        protected virtual void OnPropertyChanged(string propertyName)
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void RaisePropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
         #endregion
 
-        #region Internal IEnumerator
-        IEnumerator IEnumerable.GetEnumerator()
+        #region Non Generic
+        public override void Insert(int index, object value)
         {
-            return items.GetEnumerator();
+            Insert(index, CastValue(value));
+        }
+        public override void Remove(object value)
+        {
+            Remove(CastValue(value));
+        }
+        public override int Add(object value)
+        {
+            int index = Count;
+            Add(CastValue(value));
+            return index;
         }
         #endregion
 
