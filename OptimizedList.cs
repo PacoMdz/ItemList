@@ -7,10 +7,10 @@ using System;
 namespace Mx.CustomList
 {
     [Serializable]
-    public class OptimizedList<T> : IList<T>, IList, IReadOnlyList<T>
+    public class OptimizedList<TEntity> : IList<TEntity>, IList, IReadOnlyList<TEntity>
     {
         #region Private/Protected Member Variables
-        private T[] itemsSource = Array.Empty<T>();
+        private TEntity[] itemsSource = Array.Empty<TEntity>();
         private const byte defaultCapacity = 5;
         private uint version = 1;
         private object syncRoot;
@@ -20,7 +20,7 @@ namespace Mx.CustomList
         #endregion
 
         #region Private/Protected Methods
-        private void ValidateIndex(int index, [CallerMemberName] string callerMember = "")
+        protected void ValidateIndex(int index, [CallerMemberName] string callerMember = "")
         {
             if (index < 0)
                 throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be greater than zero.");
@@ -28,15 +28,15 @@ namespace Mx.CustomList
             if (index > Count)
                 throw new IndexOutOfRangeException($"List action { callerMember }( { index } ) could not finish. Index should be smaller than items count.");
         }
-        private T CastValue(object value, [CallerMemberName] string callerMember = "")
+        protected TEntity CastValue(object value, [CallerMemberName] string callerMember = "")
         {
-            if (!(value is T))
-                throw new InvalidCastException($"List action { callerMember }( ) could not finish. Object value can not be converted to '{ nameof(T) }' type.");
+            if (!(value is TEntity))
+                throw new InvalidCastException($"List action { callerMember }( ) could not finish. Object value can not be converted to '{ nameof(TEntity) }' type.");
 
-            return (T) value;
+            return (TEntity) value;
         }
 
-        private void DefinitionInsertRange(int index, T[] collection)
+        private void DefinitionInsertRange(int index, TEntity[] collection)
         {
             int collectionCount = collection.Length;
             EnsureCapacity(collectionCount);
@@ -67,7 +67,7 @@ namespace Mx.CustomList
         #region Constructors
         public OptimizedList()
         {
-            itemsSource = new T[defaultCapacity];
+            itemsSource = new TEntity[defaultCapacity];
         }
         public OptimizedList(int capacity)
         {
@@ -76,16 +76,16 @@ namespace Mx.CustomList
 
             int initialCapacity = Math.Max(capacity, defaultCapacity);
 
-            itemsSource = new T[initialCapacity];
+            itemsSource = new TEntity[initialCapacity];
         }
-        public OptimizedList(T[] collection)
+        public OptimizedList(TEntity[] collection)
         {
             if (collection == null)
                 throw new ArgumentNullException("collection", "Initial collection of list can not be null.");
 
             int initialCapacity = Math.Max(collection.Length, defaultCapacity);
 
-            itemsSource = new T[initialCapacity];
+            itemsSource = new TEntity[initialCapacity];
 
             if (collection.Length > 0)
                 DefinitionInsertRange(Count, collection);
@@ -93,7 +93,7 @@ namespace Mx.CustomList
         #endregion
 
         #region Indexer
-        public T this[int index]
+        public TEntity this[int index]
         {
             get
             {
@@ -110,6 +110,24 @@ namespace Mx.CustomList
         #endregion
 
         #region Public Properties
+        public bool IsSynchronized
+        {
+            get { return false; }
+        }
+        public bool IsFixedSize
+        {
+            get { return false; }
+        }
+        public object SyncRoot
+        {
+            get
+            {
+                if (syncRoot == null)
+                    Interlocked.CompareExchange(ref syncRoot, new object(), null);
+
+                return syncRoot;
+            }
+        }
         public bool IsReadOnly
         {
             get { return false; }
@@ -124,7 +142,7 @@ namespace Mx.CustomList
 
             private set
             {
-                var relocatedItems = new T[value];
+                var relocatedItems = new TEntity[value];
                 Array.Copy(itemsSource, 0, relocatedItems, 0, Count);
 
                 itemsSource = relocatedItems;
@@ -137,7 +155,7 @@ namespace Mx.CustomList
         #endregion
 
         #region Public Methods
-        public void Insert(int index, T item)
+        public virtual void Insert(int index, TEntity item)
         {
             ValidateIndex(index);
             EnsureCapacity();
@@ -149,7 +167,7 @@ namespace Mx.CustomList
             version++;
             Count++;
         }
-        public void RemoveAt(int index)
+        public virtual void RemoveAt(int index)
         {
             ValidateIndex(index);
 
@@ -159,10 +177,10 @@ namespace Mx.CustomList
             if (index < (--Count))
                 Array.Copy(itemsSource, (index + 1), itemsSource, index, (Count - index));
 
-            itemsSource[Count] = default(T);
+            itemsSource[Count] = default(TEntity);
             version++;
         }
-        public bool Remove(T item)
+        public virtual bool Remove(TEntity item)
         {
             int itemIndex = IndexOf(item);
             bool found = itemIndex >= 0;
@@ -172,13 +190,13 @@ namespace Mx.CustomList
 
             return found;
         }
-        public void Add(T item)
+        public virtual void Add(TEntity item)
         {
             EnsureCapacity();
             itemsSource[Count++] = item;
             version++;
         }
-        public void Clear()
+        public virtual void Clear()
         {
             if (Count > 0)
             {
@@ -188,9 +206,9 @@ namespace Mx.CustomList
             }
         }
 
-        public bool Contains(T item)
+        public bool Contains(TEntity item)
         {
-            var comparer = EqualityComparer<T>.Default;
+            var comparer = EqualityComparer<TEntity>.Default;
 
             for (int index = 0; index < Count; index++)
                 if (comparer.Equals(itemsSource[index], item))
@@ -198,12 +216,12 @@ namespace Mx.CustomList
 
             return false;
         }
-        public int IndexOf(T item)
+        public int IndexOf(TEntity item)
         {
             return Array.IndexOf(itemsSource, item, 0, Count);
         }
 
-        public void InsertRange(int index, T[] collection)
+        public virtual void InsertRange(int index, TEntity[] collection)
         {
             ValidateIndex(index);
 
@@ -213,12 +231,12 @@ namespace Mx.CustomList
             if (collection.Length != 0)
                 DefinitionInsertRange(index, collection);
         }
-        public void AddRange(T[] elements)
+        public virtual void AddRange(TEntity[] elements)
         {
             InsertRange(Count, elements);
         }
 
-        public void ForEach(Action<T> action)
+        public void ForEach(Action<TEntity> action)
         {
             if (action == null)
                 throw new ArgumentNullException("action", "Action to execute can not be null.");
@@ -226,13 +244,13 @@ namespace Mx.CustomList
             for (int i = 0; i < Count; i++)
                 action(itemsSource[i]);
         }
-        public T[] FindAll(Func<T, bool> match)
+        public TEntity[] FindAll(Func<TEntity, bool> match)
         {
             if (match == null)
                 throw new ArgumentNullException("match", "Match item predicate can not be null.");
 
-            var list = new OptimizedList<T>();
-            var item = default(T);
+            var list = new OptimizedList<TEntity>();
+            var item = default(TEntity);
 
             for (int i = 0; i < Count; i++)
             {
@@ -244,12 +262,12 @@ namespace Mx.CustomList
 
             return list.ToArray();
         }
-        public T Find(Func<T, bool> match)
+        public TEntity Find(Func<TEntity, bool> match)
         {
             if (match == null)
                 throw new ArgumentNullException("match", "Match item predicate can not be null.");
 
-            var item = default(T);
+            var item = default(TEntity);
 
             for (int i = 0; i < Count; i++)
             {
@@ -259,10 +277,10 @@ namespace Mx.CustomList
                     return item;
             }
 
-            return default(T);
+            return default(TEntity);
         }
 
-        public OptimizedList<T> GetRange(int index, int itemsCount)
+        public OptimizedList<TEntity> GetRange(int index, int itemsCount)
         {
             ValidateIndex(index);
 
@@ -272,31 +290,35 @@ namespace Mx.CustomList
             if (itemsCount > (Count - index))
                 throw new IndexOutOfRangeException("New items count should be smaller than actual items count.");
 
-            var newItems = new T[itemsCount];
+            var newItems = new TEntity[itemsCount];
             Array.Copy(itemsSource, index, newItems, 0, itemsCount);
 
-            return new OptimizedList<T>(newItems);
+            return new OptimizedList<TEntity>(newItems);
         }
-        public void CopyTo(T[] array, int arrayIndex = 0)
+        public void CopyTo(TEntity[] array, int arrayIndex = 0)
         {
             Array.Copy(itemsSource, 0, array, arrayIndex, Count);
         }
-        public T[] ToArray()
+        public TEntity[] ToArray()
         {
-            var array = Array.Empty<T>();
+            var array = Array.Empty<TEntity>();
 
             if (Count > 0)
             {
-                array = new T[Count];
+                array = new TEntity[Count];
                 CopyTo(array);
             }
 
             return array;
         }
 
-        public IEnumerator<T> GetEnumerator()
+        public IEnumerator<TEntity> GetEnumerator()
         {
             return new CoreEnumerator(this);
+        }
+        public void CopyTo(Array array, int index)
+        {
+            CopyTo((TEntity[]) array, index);
         }
         public override string ToString()
         {
@@ -323,63 +345,38 @@ namespace Mx.CustomList
         }
         #endregion
 
-        #region Internal IEnumerator
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return itemsSource.GetEnumerator();
-        }
-        #endregion
-
         #region Non Generic List
-        public bool IsSynchronized
-        {
-            get { return false; }
-        }
-        public bool IsFixedSize
-        {
-            get { return false; }
-        }
-        public object SyncRoot
-        {
-            get
-            {
-                if (syncRoot == null)
-                    Interlocked.CompareExchange(ref syncRoot, new object(), null);
-
-                return syncRoot;
-            }
-        }
-
         object IList.this[int index]
         {
             get { return this[index]; }
             set { this[index] = CastValue(value); }
         }
 
-        public void Insert(int index, object value)
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        public virtual void Insert(int index, object value)
         {
             Insert(index, CastValue(value));
         }
-        public void Remove(object value)
+        public virtual void Remove(object value)
         {
             Remove(CastValue(value));
         }
-        public int Add(object value)
+        public virtual int Add(object value)
         {
             int index = Count;
             Add(CastValue(value));
             return index;
         }
 
-        public void CopyTo(Array array, int index = 0)
-        {
-            CopyTo((T[]) array, index);
-        }
-        public bool Contains(object value)
+        public virtual bool Contains(object value)
         {
             return Contains(CastValue(value));
         }
-        public int IndexOf(object value)
+        public virtual int IndexOf(object value)
         {
             return IndexOf(CastValue(value));
         }
@@ -387,12 +384,12 @@ namespace Mx.CustomList
 
         #region SynchronizedList
         [Serializable]
-        internal class SynchronizedList : IList<T>
+        internal class SynchronizedList : IList<TEntity>
         {
-            private readonly OptimizedList<T> list;
+            private readonly OptimizedList<TEntity> list;
             private readonly object root;
 
-            internal SynchronizedList(OptimizedList<T> list)
+            internal SynchronizedList(OptimizedList<TEntity> list)
             {
                 this.list = list;
                 root = list.SyncRoot;
@@ -417,7 +414,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public void Add(T item)
+            public void Add(TEntity item)
             {
                 lock (root)
                 {
@@ -433,7 +430,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public bool Contains(T item)
+            public bool Contains(TEntity item)
             {
                 lock (root)
                 {
@@ -441,7 +438,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public void CopyTo(T[] array, int arrayIndex)
+            public void CopyTo(TEntity[] array, int arrayIndex)
             {
                 lock (root)
                 {
@@ -449,7 +446,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public bool Remove(T item)
+            public bool Remove(TEntity item)
             {
                 lock (root)
                 {
@@ -465,7 +462,7 @@ namespace Mx.CustomList
                 }
             }
 
-            IEnumerator<T> IEnumerable<T>.GetEnumerator()
+            IEnumerator<TEntity> IEnumerable<TEntity>.GetEnumerator()
             {
                 lock (root)
                 {
@@ -473,7 +470,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public T this[int index]
+            public TEntity this[int index]
             {
                 get
                 {
@@ -491,7 +488,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public int IndexOf(T item)
+            public int IndexOf(TEntity item)
             {
                 lock (root)
                 {
@@ -499,7 +496,7 @@ namespace Mx.CustomList
                 }
             }
 
-            public void Insert(int index, T item)
+            public void Insert(int index, TEntity item)
             {
                 lock (root)
                 {
@@ -519,10 +516,10 @@ namespace Mx.CustomList
 
         #region Publict Struct
         [Serializable]
-        public struct CoreEnumerator : IEnumerator<T>, IEnumerator
+        public struct CoreEnumerator : IEnumerator<TEntity>, IEnumerator
         {
             #region Private/Protected Member Variables
-            private readonly OptimizedList<T> list;
+            private readonly OptimizedList<TEntity> list;
             private readonly uint version;
             private int index;
             #endregion
@@ -531,19 +528,19 @@ namespace Mx.CustomList
             #endregion
 
             #region Constructors
-            internal CoreEnumerator(OptimizedList<T> list)
+            internal CoreEnumerator(OptimizedList<TEntity> list)
             {
                 this.list = list;
 
                 version = list.version;
                 index = 0;
 
-                Current = default(T);
+                Current = default(TEntity);
             }
             #endregion
 
             #region Public Properties
-            public T Current
+            public TEntity Current
             {
                 get; private set;
             }
@@ -556,12 +553,12 @@ namespace Mx.CustomList
                     throw new InvalidOperationException();
 
                 index = list.Count + 1;
-                Current = default(T);
+                Current = default(TEntity);
                 return false;
             }
             public bool MoveNext()
             {
-                OptimizedList<T> localList = list;
+                OptimizedList<TEntity> localList = list;
 
                 if (version == localList.version && (index < localList.Count))
                 {
@@ -575,7 +572,7 @@ namespace Mx.CustomList
             }
             public void Dispose()
             {
-                Current = default(T);
+                Current = default(TEntity);
             }
             #endregion
 
@@ -595,7 +592,7 @@ namespace Mx.CustomList
                 if (version != list.version)
                     throw new InvalidOperationException();
 
-                Current = default(T);
+                Current = default(TEntity);
                 index = 0;
             }
             #endregion
