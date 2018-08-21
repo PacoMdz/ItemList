@@ -6,7 +6,7 @@ using System;
 
 namespace Mx.CustomNotifyProperties
 {
-   #region Public Events
+        #region Public Events
         /// <summary>
         /// Notify all subscribers changing property values.
         /// </summary>
